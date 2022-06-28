@@ -1,5 +1,5 @@
 use crate::process::traversal::TraversalBuilder;
-use crate::structure::{GValue, Pop};
+use crate::structure::{GValue, Pop, By};
 
 pub struct SelectStep {
     params: Vec<GValue>,
@@ -47,6 +47,12 @@ where
 {
     fn from(param: (Pop, B)) -> SelectStep {
         SelectStep::new(vec![GValue::Pop(param.0), param.1.into()])
+    }
+}
+
+impl From<By> for SelectStep {
+    fn from(param: By) -> SelectStep {
+        SelectStep::new(vec![GValue::By(param)])
     }
 }
 

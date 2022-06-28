@@ -1,9 +1,15 @@
+use crate::process::traversal::scope::Scope;
+use crate::process::traversal::step::and::AndStep;
+use crate::process::traversal::step::choose::IntoChooseStep;
+use crate::process::traversal::step::coalesce::CoalesceStep;
 use crate::process::traversal::step::has::HasStep;
+use crate::process::traversal::step::local::LocalStep;
 use crate::process::traversal::step::loops::LoopsStep;
 use crate::process::traversal::step::not::NotStep;
 use crate::process::traversal::step::or::OrStep;
 use crate::process::traversal::step::repeat::RepeatStep;
 use crate::process::traversal::step::select::SelectStep;
+use crate::process::traversal::step::union::UnionStep;
 use crate::process::traversal::step::until::UntilStep;
 use crate::process::traversal::step::where_step::WhereStep;
 use crate::process::traversal::TraversalBuilder;
@@ -53,6 +59,17 @@ impl AnonymousTraversalSource {
         self.traversal.clone().v(ids)
     }
 
+    pub fn union<A>(&self, union: A) -> TraversalBuilder
+    where
+        A: Into<UnionStep>,
+    {
+        self.traversal.clone().union(union)
+    }
+
+    pub fn id(&self) -> TraversalBuilder {
+        self.traversal.clone().id()
+    }
+
     pub fn add_e<A>(&self, label: A) -> TraversalBuilder
     where
         A: Into<Labels>,
@@ -60,8 +77,11 @@ impl AnonymousTraversalSource {
         self.traversal.clone().add_e(label)
     }
 
-    pub fn count(&self) -> TraversalBuilder {
-        self.traversal.clone().count()
+    pub fn count<A>(&self, scope: A) -> TraversalBuilder
+    where
+        A: Into<Scope>,
+    {
+        self.traversal.clone().count(scope)
     }
 
     pub fn out<L>(&self, labels: L) -> TraversalBuilder
@@ -69,6 +89,10 @@ impl AnonymousTraversalSource {
         L: Into<Labels>,
     {
         self.traversal.clone().out(labels)
+    }
+
+    pub fn keys(&self) -> TraversalBuilder {
+        self.traversal.clone().keys()
     }
 
     pub fn out_e<L>(&self, labels: L) -> TraversalBuilder
@@ -120,6 +144,14 @@ impl AnonymousTraversalSource {
     {
         self.traversal.clone().values(labels)
     }
+
+    pub fn value_map<L>(&self, labels: L) -> TraversalBuilder
+    where
+        L: Into<Labels>,
+    {
+        self.traversal.clone().value_map(labels)
+    }
+
     pub fn has_label<L>(&self, labels: L) -> TraversalBuilder
     where
         L: Into<Labels>,
@@ -195,6 +227,20 @@ impl AnonymousTraversalSource {
         self.traversal.clone().or(step)
     }
 
+    pub fn and<A>(&self, step: A) -> TraversalBuilder
+    where
+        A: Into<AndStep>,
+    {
+        self.traversal.clone().and(step)
+    }
+
+    pub fn local<A>(&self, step: A) -> TraversalBuilder
+    where
+        A: Into<LocalStep>,
+    {
+        self.traversal.clone().local(step)
+    }
+
     pub fn where_<A>(&self, step: A) -> TraversalBuilder
     where
         A: Into<WhereStep>,
@@ -220,6 +266,13 @@ impl AnonymousTraversalSource {
         self.traversal.clone().constant(value)
     }
 
+    pub fn choose<A>(&self, step: A) -> TraversalBuilder
+    where
+        A: IntoChooseStep,
+    {
+        self.traversal.clone().choose(step)
+    }
+
     pub fn until<A>(&self, step: A) -> TraversalBuilder
     where
         A: Into<UntilStep>,
@@ -234,8 +287,19 @@ impl AnonymousTraversalSource {
         self.traversal.clone().repeat(step)
     }
 
+    pub fn optional(&self, step: TraversalBuilder) -> TraversalBuilder {
+        self.traversal.clone().optional(step)
+    }
+
     pub fn emit(&self) -> TraversalBuilder {
         self.traversal.clone().emit()
+    }
+
+    pub fn coalesce<A>(&self, colaesce: A) -> TraversalBuilder
+    where
+        A: Into<CoalesceStep>,
+    {
+        self.traversal.clone().coalesce(colaesce)
     }
 }
 

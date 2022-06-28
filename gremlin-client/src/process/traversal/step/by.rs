@@ -1,5 +1,5 @@
 use crate::process::traversal::{Order, TraversalBuilder};
-use crate::structure::{GValue, T};
+use crate::structure::{GValue, T, By};
 
 pub struct ByStep {
     params: Vec<GValue>,
@@ -56,6 +56,12 @@ impl From<(String, Order)> for ByStep {
 impl From<(TraversalBuilder, Order)> for ByStep {
     fn from(param: (TraversalBuilder, Order)) -> Self {
         ByStep::new(vec![param.0.bytecode.into(), param.1.into()])
+    }
+}
+
+impl From<By> for ByStep {
+    fn from(param: By) -> ByStep {
+        ByStep::new(vec![GValue::By(param)])
     }
 }
 

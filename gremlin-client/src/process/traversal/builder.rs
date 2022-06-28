@@ -1,8 +1,10 @@
 use crate::conversion::{FromGValue, ToGValue};
+use crate::process::traversal::step::and::AndStep;
 use crate::process::traversal::step::by::ByStep;
 use crate::process::traversal::step::choose::IntoChooseStep;
 use crate::process::traversal::step::coalesce::CoalesceStep;
 use crate::process::traversal::step::dedup::DedupStep;
+use crate::process::traversal::step::filter::FilterStep;
 use crate::process::traversal::step::from::FromStep;
 use crate::process::traversal::step::has::HasStep;
 use crate::process::traversal::step::limit::LimitStep;
@@ -15,6 +17,7 @@ use crate::process::traversal::step::repeat::RepeatStep;
 use crate::process::traversal::step::select::SelectStep;
 use crate::process::traversal::step::side_effect::IntoSideEffectStep;
 use crate::process::traversal::step::to::ToStep;
+use crate::process::traversal::step::union::UnionStep;
 use crate::process::traversal::step::until::UntilStep;
 use crate::process::traversal::step::where_step::WhereStep;
 
@@ -29,9 +32,7 @@ pub struct TraversalBuilder {
 
 impl Default for TraversalBuilder {
     fn default() -> Self {
-        TraversalBuilder {
-            bytecode: Bytecode::default(),
-        }
+        TraversalBuilder { bytecode: Bytecode::default() }
     }
 }
 
@@ -47,10 +48,7 @@ impl TraversalBuilder {
     where
         T: Into<GIDs>,
     {
-        self.bytecode.add_step(
-            String::from("V"),
-            ids.into().0.iter().map(|id| id.to_gvalue()).collect(),
-        );
+        self.bytecode.add_step(String::from("V"), ids.into().0.iter().map(|id| id.to_gvalue()).collect());
         self
     }
 
@@ -58,10 +56,7 @@ impl TraversalBuilder {
     where
         T: Into<GIDs>,
     {
-        self.bytecode.add_step(
-            String::from("E"),
-            ids.into().0.iter().map(|id| id.to_gvalue()).collect(),
-        );
+        self.bytecode.add_step(String::from("E"), ids.into().0.iter().map(|id| id.to_gvalue()).collect());
         self
     }
 
@@ -69,10 +64,7 @@ impl TraversalBuilder {
     where
         L: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("hasLabel"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("hasLabel"), labels.into().0.into_iter().map(GValue::from).collect());
         self
     }
 
@@ -80,10 +72,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("addV"),
-            label.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("addV"), label.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -93,8 +82,7 @@ impl TraversalBuilder {
         K: Into<GValue>,
         A: Into<GValue>,
     {
-        self.bytecode
-            .add_step(String::from("property"), vec![key.into(), value.into()]);
+        self.bytecode.add_step(String::from("property"), vec![key.into(), value.into()]);
         self
     }
 
@@ -103,28 +91,17 @@ impl TraversalBuilder {
         A: Into<GValue>,
     {
         for property in values {
-            self.bytecode.add_step(
-                String::from("property"),
-                vec![property.0.into(), property.1.into()],
-            )
+            self.bytecode.add_step(String::from("property"), vec![property.0.into(), property.1.into()])
         }
 
         self
     }
 
-    pub fn property_with_cardinality<A>(
-        mut self,
-        cardinality: Cardinality,
-        key: &str,
-        value: A,
-    ) -> Self
+    pub fn property_with_cardinality<A>(mut self, cardinality: Cardinality, key: &str, value: A) -> Self
     where
         A: Into<GValue>,
     {
-        self.bytecode.add_step(
-            String::from("property"),
-            vec![cardinality.into(), String::from(key).into(), value.into()],
-        );
+        self.bytecode.add_step(String::from("property"), vec![cardinality.into(), String::from(key).into(), value.into()]);
         self
     }
 
@@ -132,8 +109,7 @@ impl TraversalBuilder {
     where
         A: Into<HasStep>,
     {
-        self.bytecode
-            .add_step(String::from("has"), step.into().into());
+        self.bytecode.add_step(String::from("has"), step.into().into());
         self
     }
 
@@ -141,8 +117,7 @@ impl TraversalBuilder {
     where
         A: IntoSideEffectStep,
     {
-        self.bytecode
-            .add_step(String::from("sideEffect"), step.into_step());
+        self.bytecode.add_step(String::from("sideEffect"), step.into_step());
         self
     }
 
@@ -150,10 +125,7 @@ impl TraversalBuilder {
     where
         A: Into<GValue> + FromGValue,
     {
-        self.bytecode.add_source(
-            String::from("withSideEffect"),
-            vec![step.0.into(), step.1.into()],
-        );
+        self.bytecode.add_source(String::from("withSideEffect"), vec![step.0.into(), step.1.into()]);
         self
     }
 
@@ -162,9 +134,15 @@ impl TraversalBuilder {
         A: Into<HasStep>,
     {
         for step in steps {
-            self.bytecode
-                .add_step(String::from("has"), step.into().into());
+            self.bytecode.add_step(String::from("has"), step.into().into());
         }
+        self
+    }
+    pub fn has_id<A>(mut self, id: A) -> Self
+    where
+        A: Into<String>,
+    {
+        self.bytecode.add_step(String::from("hasId"), vec![id.into().into()]);
         self
     }
 
@@ -172,16 +150,14 @@ impl TraversalBuilder {
     where
         A: Into<String>,
     {
-        self.bytecode
-            .add_step(String::from("hasNot"), vec![key.into().into()]);
+        self.bytecode.add_step(String::from("hasNot"), vec![key.into().into()]);
         self
     }
     pub fn as_<A>(mut self, alias: A) -> Self
     where
         A: Into<String>,
     {
-        self.bytecode
-            .add_step(String::from("as"), vec![alias.into().into()]);
+        self.bytecode.add_step(String::from("as"), vec![alias.into().into()]);
 
         self
     }
@@ -190,10 +166,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("addE"),
-            label.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("addE"), label.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -202,10 +175,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("out"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("out"), labels.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -214,10 +184,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("outE"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("outE"), labels.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -231,10 +198,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("in"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("in"), labels.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -243,10 +207,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("inE"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("inE"), labels.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -261,10 +222,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("both"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("both"), labels.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -273,10 +231,7 @@ impl TraversalBuilder {
     where
         A: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("bothE"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("bothE"), labels.into().0.into_iter().map(GValue::from).collect());
 
         self
     }
@@ -303,8 +258,7 @@ impl TraversalBuilder {
     where
         A: Into<FromStep>,
     {
-        self.bytecode
-            .add_step(String::from("from"), step.into().into());
+        self.bytecode.add_step(String::from("from"), step.into().into());
 
         self
     }
@@ -313,8 +267,7 @@ impl TraversalBuilder {
     where
         A: Into<ToStep>,
     {
-        self.bytecode
-            .add_step(String::from("to"), step.into().into());
+        self.bytecode.add_step(String::from("to"), step.into().into());
 
         self
     }
@@ -323,10 +276,7 @@ impl TraversalBuilder {
     where
         L: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("properties"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("properties"), labels.into().0.into_iter().map(GValue::from).collect());
         self
     }
 
@@ -334,10 +284,7 @@ impl TraversalBuilder {
     where
         L: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("propertyMap"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("propertyMap"), labels.into().0.into_iter().map(GValue::from).collect());
         self
     }
 
@@ -345,10 +292,7 @@ impl TraversalBuilder {
     where
         L: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("values"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("values"), labels.into().0.into_iter().map(GValue::from).collect());
         self
     }
 
@@ -356,10 +300,7 @@ impl TraversalBuilder {
     where
         L: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("valueMap"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("valueMap"), labels.into().0.into_iter().map(GValue::from).collect());
         self
     }
 
@@ -367,15 +308,15 @@ impl TraversalBuilder {
     where
         L: Into<Labels>,
     {
-        self.bytecode.add_step(
-            String::from("elementMap"),
-            labels.into().0.into_iter().map(GValue::from).collect(),
-        );
+        self.bytecode.add_step(String::from("elementMap"), labels.into().0.into_iter().map(GValue::from).collect());
         self
     }
 
-    pub fn count(mut self) -> Self {
-        self.bytecode.add_step(String::from("count"), vec![]);
+    pub fn count<A>(mut self, scope: A) -> Self
+    where
+        A: Into<Scope>,
+    {
+        self.bytecode.add_step(String::from("count"), vec![scope.into().into()]);
         self
     }
 
@@ -403,8 +344,15 @@ impl TraversalBuilder {
     where
         A: Into<ByStep>,
     {
-        self.bytecode
-            .add_step(String::from("by"), step.into().into());
+        self.bytecode.add_step(String::from("by"), step.into().into());
+        self
+    }
+
+    pub fn filter<A>(mut self, step: A) -> Self
+    where
+        A: Into<FilterStep>,
+    {
+        self.bytecode.add_step(String::from("filter"), step.into().into());
         self
     }
 
@@ -412,8 +360,7 @@ impl TraversalBuilder {
     where
         A: Into<SelectStep>,
     {
-        self.bytecode
-            .add_step(String::from("select"), step.into().into());
+        self.bytecode.add_step(String::from("select"), step.into().into());
         self
     }
 
@@ -435,8 +382,7 @@ impl TraversalBuilder {
     where
         A: Into<LimitStep>,
     {
-        self.bytecode
-            .add_step(String::from("limit"), limit.into().into());
+        self.bytecode.add_step(String::from("limit"), limit.into().into());
 
         self
     }
@@ -445,8 +391,7 @@ impl TraversalBuilder {
     where
         A: Into<DedupStep>,
     {
-        self.bytecode
-            .add_step(String::from("dedup"), limit.into().into());
+        self.bytecode.add_step(String::from("dedup"), limit.into().into());
 
         self
     }
@@ -455,8 +400,13 @@ impl TraversalBuilder {
     where
         A: Into<Scope>,
     {
-        self.bytecode
-            .add_step(String::from("sum"), vec![scope.into().into()]);
+        self.bytecode.add_step(String::from("sum"), vec![scope.into().into()]);
+
+        self
+    }
+
+    pub fn keys(mut self) -> Self {
+        self.bytecode.add_step(String::from("keys"), vec![]);
 
         self
     }
@@ -465,8 +415,7 @@ impl TraversalBuilder {
     where
         A: Into<Scope>,
     {
-        self.bytecode
-            .add_step(String::from("max"), vec![scope.into().into()]);
+        self.bytecode.add_step(String::from("max"), vec![scope.into().into()]);
 
         self
     }
@@ -475,8 +424,7 @@ impl TraversalBuilder {
     where
         A: Into<Scope>,
     {
-        self.bytecode
-            .add_step(String::from("mean"), vec![scope.into().into()]);
+        self.bytecode.add_step(String::from("mean"), vec![scope.into().into()]);
 
         self
     }
@@ -485,8 +433,7 @@ impl TraversalBuilder {
     where
         A: Into<Scope>,
     {
-        self.bytecode
-            .add_step(String::from("min"), vec![scope.into().into()]);
+        self.bytecode.add_step(String::from("min"), vec![scope.into().into()]);
 
         self
     }
@@ -495,8 +442,7 @@ impl TraversalBuilder {
     where
         A: IntoPredicate,
     {
-        self.bytecode
-            .add_step(String::from("is"), vec![val.into_predicate().into()]);
+        self.bytecode.add_step(String::from("is"), vec![val.into_predicate().into()]);
 
         self
     }
@@ -505,8 +451,7 @@ impl TraversalBuilder {
     where
         A: Into<WhereStep>,
     {
-        self.bytecode
-            .add_step(String::from("where"), step.into().into());
+        self.bytecode.add_step(String::from("where"), step.into().into());
         self
     }
 
@@ -514,8 +459,7 @@ impl TraversalBuilder {
     where
         A: Into<NotStep>,
     {
-        self.bytecode
-            .add_step(String::from("not"), step.into().into());
+        self.bytecode.add_step(String::from("not"), step.into().into());
         self
     }
 
@@ -523,8 +467,7 @@ impl TraversalBuilder {
     where
         A: Into<Scope>,
     {
-        self.bytecode
-            .add_step(String::from("order"), vec![scope.into().into()]);
+        self.bytecode.add_step(String::from("order"), vec![scope.into().into()]);
 
         self
     }
@@ -533,8 +476,7 @@ impl TraversalBuilder {
     where
         A: Into<MatchStep>,
     {
-        self.bytecode
-            .add_step(String::from("match"), step.into().into());
+        self.bytecode.add_step(String::from("match"), step.into().into());
         self
     }
 
@@ -547,8 +489,15 @@ impl TraversalBuilder {
     where
         A: Into<OrStep>,
     {
-        self.bytecode
-            .add_step(String::from("or"), step.into().into());
+        self.bytecode.add_step(String::from("or"), step.into().into());
+        self
+    }
+
+    pub fn and<A>(mut self, step: A) -> Self
+    where
+        A: Into<AndStep>,
+    {
+        self.bytecode.add_step(String::from("and"), step.into().into());
         self
     }
 
@@ -556,8 +505,7 @@ impl TraversalBuilder {
     where
         A: Into<SelectStep>,
     {
-        self.bytecode
-            .add_step(String::from("project"), step.into().into());
+        self.bytecode.add_step(String::from("project"), step.into().into());
         self
     }
 
@@ -565,8 +513,7 @@ impl TraversalBuilder {
     where
         A: Into<ByStep>,
     {
-        self.bytecode
-            .add_step(String::from("map"), step.into().into());
+        self.bytecode.add_step(String::from("map"), step.into().into());
         self
     }
 
@@ -574,8 +521,7 @@ impl TraversalBuilder {
     where
         A: Into<RepeatStep>,
     {
-        self.bytecode
-            .add_step(String::from("repeat"), step.into().into());
+        self.bytecode.add_step(String::from("repeat"), step.into().into());
 
         self
     }
@@ -584,8 +530,7 @@ impl TraversalBuilder {
     where
         A: Into<UntilStep>,
     {
-        self.bytecode
-            .add_step(String::from("until"), step.into().into());
+        self.bytecode.add_step(String::from("until"), step.into().into());
 
         self
     }
@@ -597,8 +542,7 @@ impl TraversalBuilder {
     }
 
     pub fn sample(mut self, step: i32) -> Self {
-        self.bytecode
-            .add_step(String::from("sample"), vec![step.into()]);
+        self.bytecode.add_step(String::from("sample"), vec![step.into()]);
         self
     }
 
@@ -606,8 +550,7 @@ impl TraversalBuilder {
     where
         A: Into<LoopsStep>,
     {
-        self.bytecode
-            .add_step(String::from("loops"), step.into().into());
+        self.bytecode.add_step(String::from("loops"), step.into().into());
         self
     }
 
@@ -615,8 +558,7 @@ impl TraversalBuilder {
     where
         A: Into<LocalStep>,
     {
-        self.bytecode
-            .add_step(String::from("local"), step.into().into());
+        self.bytecode.add_step(String::from("local"), step.into().into());
         self
     }
 
@@ -624,8 +566,7 @@ impl TraversalBuilder {
     where
         A: Into<String>,
     {
-        self.bytecode
-            .add_step(String::from("aggregate"), vec![alias.into().into()]);
+        self.bytecode.add_step(String::from("aggregate"), vec![alias.into().into()]);
         self
     }
 
@@ -638,8 +579,7 @@ impl TraversalBuilder {
     where
         A: IntoChooseStep,
     {
-        self.bytecode
-            .add_step(String::from("choose"), step.into_step());
+        self.bytecode.add_step(String::from("choose"), step.into_step());
         self
     }
 
@@ -647,8 +587,16 @@ impl TraversalBuilder {
     where
         A: Into<CoalesceStep>,
     {
-        self.bytecode
-            .add_step(String::from("coalesce"), coalesce.into().into());
+        self.bytecode.add_step(String::from("coalesce"), coalesce.into().into());
+
+        self
+    }
+
+    pub fn union<A>(mut self, coalesce: A) -> Self
+    where
+        A: Into<UnionStep>,
+    {
+        self.bytecode.add_step(String::from("union"), coalesce.into().into());
 
         self
     }
@@ -659,14 +607,12 @@ impl TraversalBuilder {
     }
 
     pub fn range(mut self, step: i64, step2: i64) -> Self {
-        self.bytecode
-            .add_step(String::from("range"), vec![step.into(), step2.into()]);
+        self.bytecode.add_step(String::from("range"), vec![step.into(), step2.into()]);
         self
     }
 
     pub fn cap(mut self, step: &'static str) -> Self {
-        self.bytecode
-            .add_step(String::from("cap"), vec![step.into()]);
+        self.bytecode.add_step(String::from("cap"), vec![step.into()]);
         self
     }
 
@@ -676,8 +622,7 @@ impl TraversalBuilder {
     }
 
     pub fn optional(mut self, step: TraversalBuilder) -> Self {
-        self.bytecode
-            .add_step(String::from("optional"), vec![step.bytecode.into()]);
+        self.bytecode.add_step(String::from("optional"), vec![step.bytecode.into()]);
         self
     }
 
@@ -685,8 +630,7 @@ impl TraversalBuilder {
     where
         A: Into<GValue>,
     {
-        self.bytecode
-            .add_step(String::from("constant"), vec![value.into()]);
+        self.bytecode.add_step(String::from("constant"), vec![value.into()]);
         self
     }
 

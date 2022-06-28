@@ -1,16 +1,15 @@
 use crate::conversion::{BorrowFromGValue, FromGValue};
 use crate::process::traversal::{Bytecode, Order, Scope};
 use crate::structure::traverser::Traverser;
-use crate::structure::{
-    label::LabelType, Cardinality, Edge, GKey, IntermediateRepr, List, Map, Metric, Path, Property,
-    Set, Token, TraversalExplanation, TraversalMetrics, Vertex, VertexProperty,
-};
-use crate::structure::{Pop, TextP, P, T};
+use crate::structure::{label::LabelType, Cardinality, Edge, GKey, IntermediateRepr, List, Map, Metric, Path, Property, Set, Token, TraversalExplanation, TraversalMetrics, Vertex, VertexProperty};
+use crate::structure::{By, Pop, TextP, P, T};
 use crate::{GremlinError, GremlinResult};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 pub type Date = chrono::DateTime<chrono::offset::Utc>;
 use std::convert::TryInto;
 use std::hash::Hash;
+use uuid::uuid;
+
 /// Represent possible values coming from the [Gremlin Server](http://tinkerpop.apache.org/docs/3.4.0/dev/io/)
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Clone)]
@@ -45,6 +44,7 @@ pub enum GValue {
     Bool(bool),
     TextP(TextP),
     Pop(Pop),
+    By(By),
     Cardinality(Cardinality),
 }
 
@@ -329,6 +329,7 @@ impl std::convert::TryFrom<GValue> for i64 {
     fn try_from(value: GValue) -> GremlinResult<Self> {
         match value {
             GValue::Int64(s) => Ok(s),
+            GValue::Int32(s) => Ok(i64::from(s)),
             GValue::List(s) => from_list(s),
             GValue::VertexProperty(vp) => vp.take(),
             GValue::Property(p) => p.take(),
@@ -344,6 +345,7 @@ impl std::convert::TryFrom<GValue> for uuid::Uuid {
     type Error = crate::GremlinError;
 
     fn try_from(value: GValue) -> GremlinResult<Self> {
+        let cloned = value.clone();
         match value {
             GValue::Uuid(uid) => Ok(uid),
             GValue::List(s) => from_list(s),
@@ -447,10 +449,7 @@ impl std::convert::TryFrom<GValue> for HashMap<GKey, GValue> {
         if let GValue::Map(m) = value {
             Ok(m.into())
         } else {
-            Err(GremlinError::Cast(format!(
-                "Cannot cast {:?} to HashMap<GKey, GValue>",
-                value
-            )))
+            Err(GremlinError::Cast(format!("Cannot cast {:?} to HashMap<GKey, GValue>", value)))
         }
     }
 }
@@ -516,29 +515,21 @@ fn for_list<T>(glist: &List) -> GremlinResult<Vec<T>>
 where
     T: std::convert::TryFrom<GValue, Error = GremlinError>,
 {
-    glist
-        .iter()
-        .map(|x| x.clone().try_into())
-        .collect::<GremlinResult<Vec<T>>>()
+    glist.iter().map(|x| x.clone().try_into()).collect::<GremlinResult<Vec<T>>>()
 }
 
 fn for_list_to_set<T>(glist: &List) -> GremlinResult<HashSet<T>>
 where
     T: std::convert::TryFrom<GValue, Error = GremlinError> + Hash + Eq,
 {
-    glist
-        .iter()
-        .map(|x| x.clone().try_into())
-        .collect::<GremlinResult<HashSet<T>>>()
+    glist.iter().map(|x| x.clone().try_into()).collect::<GremlinResult<HashSet<T>>>()
 }
 
 fn for_set<T>(gset: &Set) -> GremlinResult<HashSet<T>>
 where
     T: std::convert::TryFrom<GValue, Error = GremlinError> + Hash + Eq,
 {
-    gset.iter()
-        .map(|x| x.clone().try_into())
-        .collect::<GremlinResult<HashSet<T>>>()
+    gset.iter().map(|x| x.clone().try_into()).collect::<GremlinResult<HashSet<T>>>()
 }
 
 macro_rules! impl_try_from_set {
@@ -551,10 +542,7 @@ macro_rules! impl_try_from_set {
                     GValue::List(s) => for_list_to_set(&s),
                     GValue::Set(s) => for_set(&s),
                     GValue::Null => Ok(HashSet::new()),
-                    _ => Err(GremlinError::Cast(format!(
-                        "Cannot cast {:?} to HashSet",
-                        value
-                    ))),
+                    _ => Err(GremlinError::Cast(format!("Cannot cast {:?} to HashSet", value))),
                 }
             }
         }
@@ -567,10 +555,7 @@ macro_rules! impl_try_from_set {
                     GValue::List(s) => for_list_to_set(&s),
                     GValue::Set(s) => for_set(&s),
                     GValue::Null => Ok(HashSet::new()),
-                    _ => Err(GremlinError::Cast(format!(
-                        "Cannot cast {:?} to HashSet",
-                        value
-                    ))),
+                    _ => Err(GremlinError::Cast(format!("Cannot cast {:?} to HashSet", value))),
                 }
             }
         }
@@ -583,10 +568,7 @@ macro_rules! impl_try_from_set {
                     GValue::List(s) => for_list_to_set(s),
                     GValue::Set(s) => for_set(s),
                     GValue::Null => Ok(HashSet::new()),
-                    _ => Err(GremlinError::Cast(format!(
-                        "Cannot cast {:?} to HashSet",
-                        value
-                    ))),
+                    _ => Err(GremlinError::Cast(format!("Cannot cast {:?} to HashSet", value))),
                 }
             }
         }
@@ -612,10 +594,7 @@ macro_rules! impl_try_from_list {
                 match value {
                     GValue::List(s) => for_list(&s),
                     GValue::Null => Ok(Vec::new()),
-                    _ => Err(GremlinError::Cast(format!(
-                        "Cannot cast {:?} to Vec",
-                        value
-                    ))),
+                    _ => Err(GremlinError::Cast(format!("Cannot cast {:?} to Vec", value))),
                 }
             }
         }
@@ -627,10 +606,7 @@ macro_rules! impl_try_from_list {
                 match value {
                     GValue::List(s) => for_list(s),
                     GValue::Null => Ok(Vec::new()),
-                    _ => Err(GremlinError::Cast(format!(
-                        "Cannot cast {:?} to Vec",
-                        value
-                    ))),
+                    _ => Err(GremlinError::Cast(format!("Cannot cast {:?} to Vec", value))),
                 }
             }
         }

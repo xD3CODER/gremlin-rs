@@ -20,7 +20,7 @@ mod traverser;
 mod value;
 mod vertex;
 mod vertex_property;
-
+mod by;
 pub use self::edge::Edge;
 pub use self::gid::{GIDs, GID};
 pub use self::list::List;
@@ -39,6 +39,7 @@ pub use label::Labels;
 pub use map::{GKey, Map};
 pub use p::{IntoPredicate, P};
 pub use pop::Pop;
+pub use by::By;
 pub use t::T;
 pub use text_p::TextP;
 pub use traverser::Traverser;

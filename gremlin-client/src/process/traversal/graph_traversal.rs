@@ -1,8 +1,11 @@
 use crate::conversion::FromGValue;
+use crate::process::traversal::remote::{SyncTerminator, Terminator};
+use crate::process::traversal::step::and::AndStep;
 use crate::process::traversal::step::by::ByStep;
 use crate::process::traversal::step::choose::IntoChooseStep;
 use crate::process::traversal::step::coalesce::CoalesceStep;
 use crate::process::traversal::step::dedup::DedupStep;
+use crate::process::traversal::step::filter::FilterStep;
 use crate::process::traversal::step::from::FromStep;
 use crate::process::traversal::step::has::HasStep;
 use crate::process::traversal::step::limit::LimitStep;
@@ -14,19 +17,13 @@ use crate::process::traversal::step::or::OrStep;
 use crate::process::traversal::step::repeat::RepeatStep;
 use crate::process::traversal::step::select::SelectStep;
 use crate::process::traversal::step::to::ToStep;
+use crate::process::traversal::step::union::UnionStep;
 use crate::process::traversal::step::until::UntilStep;
 use crate::process::traversal::step::where_step::WhereStep;
-
-use crate::process::traversal::remote::{SyncTerminator, Terminator};
-use crate::process::traversal::strategies::{
-    RemoteStrategy, TraversalStrategies, TraversalStrategy,
-};
+use crate::process::traversal::strategies::{RemoteStrategy, TraversalStrategies, TraversalStrategy};
 use crate::process::traversal::{Bytecode, Scope, TraversalBuilder, WRITE_OPERATORS};
 use crate::structure::{Cardinality, Labels};
-use crate::{
-    structure::GIDs, structure::GProperty, structure::IntoPredicate, Edge, GValue, GremlinClient,
-    List, Map, Path, Vertex,
-};
+use crate::{structure::GIDs, structure::GProperty, structure::IntoPredicate, Edge, GValue, GremlinClient, List, Map, Path, Vertex};
 use std::marker::PhantomData;
 
 #[derive(Clone)]
@@ -61,10 +58,7 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
     }
 
     pub fn does_write(&self) -> bool {
-        self.bytecode()
-            .steps()
-            .iter()
-            .any(|instruction| WRITE_OPERATORS.contains(&&*instruction.operator().as_ref()))
+        self.bytecode().steps().iter().any(|instruction| WRITE_OPERATORS.contains(&&*instruction.operator().as_ref()))
     }
 
     pub fn bytecode(&self) -> &Bytecode {
@@ -97,18 +91,11 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         self
     }
 
-    pub fn property_with_cardinality<A>(
-        mut self,
-        cardinality: Cardinality,
-        key: &str,
-        value: A,
-    ) -> Self
+    pub fn property_with_cardinality<A>(mut self, cardinality: Cardinality, key: &str, value: A) -> Self
     where
         A: Into<GValue>,
     {
-        self.builder = self
-            .builder
-            .property_with_cardinality(cardinality, key, value);
+        self.builder = self.builder.property_with_cardinality(cardinality, key, value);
         self
     }
 
@@ -117,25 +104,18 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         A: Into<GValue>,
     {
         for property in values {
-            self.builder = self
-                .builder
-                .property::<&str, A>(property.0.as_ref(), property.1)
+            self.builder = self.builder.property::<&str, A>(property.0.as_ref(), property.1)
         }
 
         self
     }
 
-    pub fn property_many_with_cardinality<A>(
-        mut self,
-        values: Vec<(Cardinality, String, A)>,
-    ) -> Self
+    pub fn property_many_with_cardinality<A>(mut self, values: Vec<(Cardinality, String, A)>) -> Self
     where
         A: Into<GValue>,
     {
         for property in values {
-            self.builder =
-                self.builder
-                    .property_with_cardinality(property.0, property.1.as_ref(), property.2);
+            self.builder = self.builder.property_with_cardinality(property.0, property.1.as_ref(), property.2);
         }
 
         self
@@ -155,6 +135,15 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         A: Into<HasStep>,
     {
         self.builder = self.builder.has_many(steps);
+
+        self
+    }
+
+    pub fn has_id<A>(mut self, id: A) -> Self
+    where
+        A: Into<String>,
+    {
+        self.builder = self.builder.has_id(id);
 
         self
     }
@@ -376,11 +365,12 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         GraphTraversal::new(self.terminator, self.builder)
     }
 
-    pub fn count(mut self) -> GraphTraversal<S, i64, T>
+    pub fn count<A>(mut self, scope: A) -> GraphTraversal<S, i64, T>
     where
         T: Terminator<i64>,
+        A: Into<Scope>,
     {
-        self.builder = self.builder.count();
+        self.builder = self.builder.count(scope);
         GraphTraversal::new(self.terminator, self.builder)
     }
 
@@ -423,6 +413,13 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         A: Into<ByStep>,
     {
         self.builder = self.builder.by(step);
+        self
+    }
+    pub fn filter<A>(mut self, step: A) -> Self
+    where
+        A: Into<FilterStep>,
+    {
+        self.builder = self.builder.filter(step);
         self
     }
 
@@ -478,6 +475,15 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         T: Terminator<GValue>,
     {
         self.builder = self.builder.sum(scope);
+
+        GraphTraversal::new(self.terminator, self.builder)
+    }
+
+    pub fn keys(mut self) -> GraphTraversal<S, GValue, T>
+    where
+        T: Terminator<GValue>,
+    {
+        self.builder = self.builder.keys();
 
         GraphTraversal::new(self.terminator, self.builder)
     }
@@ -566,6 +572,13 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         A: Into<OrStep>,
     {
         self.builder = self.builder.or(step);
+        self
+    }
+    pub fn and<A>(mut self, step: A) -> Self
+    where
+        A: Into<AndStep>,
+    {
+        self.builder = self.builder.and(step);
         self
     }
 
@@ -669,6 +682,15 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
         GraphTraversal::new(self.terminator, self.builder)
     }
 
+    pub fn union<A>(mut self, union: A) -> Self
+    where
+        A: Into<UnionStep>,
+    {
+        self.builder = self.builder.union(union);
+
+        self
+    }
+
     pub fn identity(mut self) -> Self {
         self.builder = self.builder.identity();
         self
@@ -705,5 +727,14 @@ impl<S, E: FromGValue, T: Terminator<E>> GraphTraversal<S, E, T> {
     pub fn emit(mut self) -> Self {
         self.builder = self.builder.emit();
         self
+    }
+
+    pub fn id(mut self) -> GraphTraversal<S, GValue, T>
+    where
+        T: Terminator<GValue>,
+    {
+        self.builder = self.builder.id();
+
+        GraphTraversal::new(self.terminator, self.builder)
     }
 }

@@ -81,8 +81,21 @@ impl GraphSON {
                         let mut instruction = vec![];
                         instruction.push(Value::String(m.operator().clone()));
 
-                        let arguments: GremlinResult<Vec<Value>> =
-                            m.args().iter().map(|a| self.write(a)).collect();
+                        let arguments: GremlinResult<Vec<Value>> = m.args().iter().map(|a| self.write(a)).collect();
+
+                        instruction.extend(arguments?);
+                        Ok(Value::Array(instruction))
+                    })
+                    .collect();
+
+                let sources: GremlinResult<Vec<Value>> = code
+                    .sources()
+                    .iter()
+                    .map(|m| {
+                        let mut instruction = vec![];
+                        instruction.push(Value::String(m.operator().clone()));
+
+                        let arguments: GremlinResult<Vec<Value>> = m.args().iter().map(|a| self.write(a)).collect();
 
                         instruction.extend(arguments?);
                         Ok(Value::Array(instruction))
@@ -98,6 +111,20 @@ impl GraphSON {
 
                         let arguments: GremlinResult<Vec<Value>> =
                             m.args().iter().map(|a| self.write(a)).collect();
+
+                        instruction.extend(arguments?);
+                        Ok(Value::Array(instruction))
+                    })
+                    .collect();
+
+                let sources: GremlinResult<Vec<Value>> = code
+                    .sources()
+                    .iter()
+                    .map(|m| {
+                        let mut instruction = vec![];
+                        instruction.push(Value::String(m.operator().clone()));
+
+                        let arguments: GremlinResult<Vec<Value>> = m.args().iter().map(|a| self.write(a)).collect();
 
                         instruction.extend(arguments?);
                         Ok(Value::Array(instruction))
@@ -127,9 +154,7 @@ impl GraphSON {
                     params.insert(
                         self.write(&k.clone().into())?
                             .as_str()
-                            .ok_or_else(|| {
-                                GremlinError::Generic("Non-string key value.".to_string())
-                            })?
+                            .ok_or_else(|| GremlinError::Generic("Non-string key value.".to_string()))?
                             .to_string(),
                         self.write(&v)?,
                     );
@@ -194,6 +219,7 @@ impl GraphSON {
                 };
                 Ok(serde_json::from_str(json_string).unwrap())
             }
+            (_, GValue::Null) => Ok(serde_json::from_str("null").unwrap()),
             (_, GValue::TextP(text_p)) => Ok(json!({
                 "@type" : "g:TextP",
                 "@value" : {
@@ -204,6 +230,10 @@ impl GraphSON {
             (_, GValue::Pop(pop)) => Ok(json!({
                 "@type": "g:Pop",
                 "@value": *pop.to_string(),
+            })),
+            (_, GValue::By(by)) => Ok(json!({
+                "@type": "g:Column",
+                "@value": *by.to_string(),
             })),
             (_, GValue::Cardinality(cardinality)) => {
                 let v = match cardinality {
